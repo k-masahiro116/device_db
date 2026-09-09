@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>device_db</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">device_db</div>
+      <div class="topbar-actions">
+        <input id="searchInput" class="search" type="search" placeholder="部品を検索…" autocomplete="off" />
+        <button id="columnSettingsBtn" class="btn" type="button">表示カラム</button>
+        <button id="newPartBtn" class="btn btn-primary" type="button">新規</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <div id="statusMessage" class="status" hidden></div>
+      <div class="table-wrap" id="tableWrap">
+        <table class="parts-table" id="partsTable">
+          <thead>
+            <tr id="headerRow"></tr>
+            <tr id="filterRow"></tr>
+          </thead>
+          <tbody id="partsBody"></tbody>
+        </table>
+        <div id="emptyState" class="empty" hidden>部品がありません。新規から追加してください。</div>
+        <div id="loadingMore" class="loading" hidden>読み込み中…</div>
+      </div>
+    </main>
+  </div>
+
+  <aside id="sideSheet" class="sheet" aria-hidden="true">
+    <div class="sheet-header">
+      <h2 id="sheetTitle">部品</h2>
+      <button id="closeSheetBtn" class="btn" type="button" aria-label="閉じる">閉じる</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+    <div class="sheet-footer">
+      <button id="deletePartBtn" class="btn btn-danger" type="button">削除</button>
+      <div class="sheet-footer-right">
+        <button id="cancelSheetBtn" class="btn" type="button">キャンセル</button>
+        <button id="savePartBtn" class="btn btn-primary" type="button">保存</button>
+      </div>
+    </div>
+  </aside>
+  <div id="sheetBackdrop" class="backdrop" hidden></div>
+
+  <dialog id="columnDialog" class="dialog">
+    <form method="dialog" id="columnForm">
+      <h3>表示カラム</h3>
+      <p class="hint">部品名称は常に表示されます。水平スクロールで閲覧する追加カラムを選んでください。</p>
+      <div id="columnChecks" class="checks"></div>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel" type="submit">キャンセル</button>
+        <button class="btn btn-primary" value="ok" type="submit">適用</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

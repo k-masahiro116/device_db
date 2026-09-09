@@ -1,0 +1,18 @@
+{
+  "columns": [
+    {"key": "manufacturer", "label": "メーカー", "type": "text", "order": 1},
+    {"key": "part_number", "label": "型番", "type": "text", "order": 2},
+    {"key": "category", "label": "カテゴリ", "type": "text", "order": 3},
+    {"key": "package", "label": "パッケージ", "type": "text", "order": 4},
+    {"key": "voltage_rating", "label": "定格電圧", "type": "text", "order": 5},
+    {"key": "current_rating", "label": "定格電流", "type": "text", "order": 6},
+    {"key": "tolerance", "label": "許容差", "type": "text", "order": 7},
+    {"key": "supplier", "label": "仕入先", "type": "text", "order": 8},
+    {"key": "unit_price", "label": "単価", "type": "number", "order": 9},
+    {"key": "stock", "label": "在庫", "type": "number", "order": 10},
+    {"key": "lead_time", "label": "リードタイム", "type": "text", "order": 11},
+    {"key": "datasheet_url", "label": "データシート URL", "type": "text", "order": 12},
+    {"key": "notes", "label": "社内メモ", "type": "text", "order": 13},
+    {"key": "design_examples", "label": "設計事例", "type": "file", "order": 14}
+  ]
+}
