@@ -149,12 +149,10 @@ def api_upload_file(part_id: str, column_key: str):
 
     content = uploaded.read()
     mime = uploaded.mimetype or mimetypes.guess_type(uploaded.filename)[0] or ""
-    # Normalize common browser mime quirks
-    name_lower = uploaded.filename.lower()
-    if name_lower.endswith(".png"):
-        mime = "image/png"
-    elif name_lower.endswith(".pdf"):
-        mime = "application/pdf"
+    # 拡張子から MIME を正規化（ブラウザ差・空 MIME 対策）
+    suffix = Path(uploaded.filename).suffix.lower()
+    if suffix in storage.EXTENSION_MIME:
+        mime = storage.EXTENSION_MIME[suffix]
 
     try:
         meta = storage.add_file(
@@ -180,10 +178,13 @@ def api_download_file(part_id: str, column_key: str, file_id: str):
         return _error(str(exc), 404)
     if not path.exists():
         return _error("ファイル実体が見つかりません", 404)
+    mime = meta.get("mime") or "application/octet-stream"
+    # ブラウザ内プレビューしやすい形式以外はダウンロードさせる
+    inline = mime in {"application/pdf", "image/png"}
     return send_file(
         path,
-        mimetype=meta.get("mime"),
-        as_attachment=False,
+        mimetype=mime,
+        as_attachment=not inline,
         download_name=meta.get("original_name"),
     )
 

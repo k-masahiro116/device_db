@@ -4,7 +4,7 @@
       "id": "99831b59-2949-4cd5-ab86-473004a036b1",
       "name": "チップ抵抗 10kΩ",
       "created_at": "2026-09-09T08:11:35+00:00",
-      "updated_at": "2026-09-10T17:02:48+00:00",
+      "updated_at": "2026-09-10T23:48:11+00:00",
       "assigned": [
         "manufacturer",
         "part_number",
@@ -14,17 +14,9 @@
         "supplier",
         "unit_price",
         "stock",
-        "notes"
-      ],
-      "manufacturer": "Yageo",
-      "part_number": "RC0603FR-0710KL",
-      "category": "抵抗",
-      "package": "0603",
-      "tolerance": "1%",
-      "supplier": "Digi-Key",
-      "unit_price": 1.2,
-      "stock": 500,
-      "notes": "汎用プルアップ用\nあああ\nあああ"
+        "notes",
+        "design_examples"
+      ]
     },
     {
       "id": "5d037087-c243-4470-8e4a-a1f37af1b653",

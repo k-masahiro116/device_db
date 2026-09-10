@@ -326,13 +326,13 @@
       return `<div class="field" data-file-field="${col.key}">
         <label>${escapeHtml(col.label)}</label>
         <div class="file-list">${list || "<span class=\"file-count\">ファイルなし</span>"}</div>
-        <input type="file" accept=".pdf,.png,application/pdf,image/png" data-upload-key="${col.key}" ${
+        <input type="file" accept=".pdf,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" data-upload-key="${col.key}" ${
           state.mode === "create" ? "disabled" : ""
         } />
         ${
           state.mode === "create"
             ? "<p class=\"hint\">保存後にファイルを添付できます。</p>"
-            : "<p class=\"hint\">PDF / PNG、1ファイル 10MB まで</p>"
+            : "<p class=\"hint\">PDF / PNG / Word / Excel / PowerPoint、1ファイル 10MB まで</p>"
         }
       </div>`;
     }

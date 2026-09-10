@@ -24,8 +24,25 @@ ALLOWED_COLUMN_TYPES = frozenset({"text", "textarea", "number", "file"})
 ALLOWED_MIME = {
     "application/pdf": ".pdf",
     "image/png": ".png",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+}
+EXTENSION_MIME = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+ALLOWED_UPLOAD_LABEL = "PDF / PNG / Word / Excel / PowerPoint"
 
 
 def utc_now_iso() -> str:
@@ -507,7 +524,7 @@ def add_file(
     mime: str,
 ) -> dict[str, Any]:
     if mime not in ALLOWED_MIME:
-        raise ValueError("PDF または PNG のみアップロードできます")
+        raise ValueError(f"{ALLOWED_UPLOAD_LABEL} のみアップロードできます")
     if len(content) > MAX_UPLOAD_BYTES:
         raise ValueError("ファイルサイズは 10MB 以下にしてください")
     if len(content) == 0:
