@@ -1,10 +1,12 @@
 (() => {
   const PAGE_SIZE = 40;
-  const STORAGE_KEY = "device_db.visibleColumns";
+  const STORAGE_VISIBLE = "device_db.visibleColumns";
+  const STORAGE_ORDER = "device_db.columnOrder";
 
   const state = {
     columns: [],
     visibleKeys: [],
+    columnOrder: [],
     items: [],
     total: 0,
     offset: 0,
@@ -76,7 +78,7 @@
 
   function loadVisibleKeys(columns) {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(STORAGE_VISIBLE);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
@@ -89,8 +91,43 @@
     return defaultVisibleKeys(columns);
   }
 
-  function saveVisibleKeys(keys) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(keys));
+  function loadColumnOrder(columns) {
+    const catalogKeys = columns.map((c) => c.key);
+    try {
+      const raw = localStorage.getItem(STORAGE_ORDER);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const known = parsed.filter((key) => catalogKeys.includes(key));
+          const missing = catalogKeys.filter((key) => !known.includes(key));
+          return known.concat(missing);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    // 旧データ移行: 表示中カラムの順を先頭にする
+    try {
+      const raw = localStorage.getItem(STORAGE_VISIBLE);
+      if (raw) {
+        const visible = JSON.parse(raw);
+        if (Array.isArray(visible)) {
+          const known = visible.filter((key) => catalogKeys.includes(key));
+          const missing = catalogKeys.filter((key) => !known.includes(key));
+          return known.concat(missing);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return catalogKeys;
+  }
+
+  function saveColumnPrefs(visibleKeys, columnOrder) {
+    state.visibleKeys = visibleKeys;
+    state.columnOrder = columnOrder;
+    localStorage.setItem(STORAGE_VISIBLE, JSON.stringify(visibleKeys));
+    localStorage.setItem(STORAGE_ORDER, JSON.stringify(columnOrder));
   }
 
   function buildQueryParams({ append = false } = {}) {
@@ -132,11 +169,42 @@
   }
 
   function visibleColumns() {
-    return state.columns.filter((c) => state.visibleKeys.includes(c.key));
+    const byKey = Object.fromEntries(state.columns.map((c) => [c.key, c]));
+    return state.columnOrder
+      .filter((key) => state.visibleKeys.includes(key))
+      .map((key) => byKey[key])
+      .filter(Boolean);
   }
 
+  // 一覧の固定カラム（常時表示・サイドシートでは編集不可）
+  const FIXED_COLUMNS = [
+    { key: "name", label: "名称", type: "text", fixed: true, stickyClass: "col-fixed col-fixed-name" },
+    {
+      key: "updated_at",
+      label: "更新日",
+      type: "text",
+      fixed: true,
+      stickyClass: "col-fixed col-fixed-updated",
+      readonly: true,
+    },
+  ];
+
   function displayColumns() {
-    return [{ key: "name", label: "部品名称", type: "text" }, ...visibleColumns()];
+    return [...FIXED_COLUMNS, ...visibleColumns()];
+  }
+
+  function stickyClass(column) {
+    return column.stickyClass || "";
+  }
+
+  function formatUpdatedAt(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(
+      d.getMinutes()
+    )}`;
   }
 
   function sortMark(key) {
@@ -156,17 +224,17 @@
     els.headerRow.innerHTML = cols
       .map(
         (c) =>
-          `<th class="${c.key === "name" ? "col-name" : ""}" data-sort="${c.key}">${escapeHtml(
-            c.label
-          )}<span class="sort-mark">${sortMark(c.key)}</span></th>`
+          `<th class="${stickyClass(c)}" data-sort="${c.key}">${escapeHtml(c.label)}<span class="sort-mark">${sortMark(
+            c.key
+          )}</span></th>`
       )
       .join("");
 
     els.filterRow.innerHTML = cols
       .map((c) => {
-        const value = c.key === "name" ? state.filters.name || "" : state.filters[c.key] || "";
-        return `<th class="${c.key === "name" ? "col-name" : ""}">
-          <input class="filter-input" data-filter-key="${c.key}" value="${escapeAttr(value)}" placeholder="絞り込み" />
+        const value = state.filters[c.key] || "";
+        return `<th class="${stickyClass(c)}">
+          <input class="filter-input" data-filter-key="${c.key}" value="${escapeAttr(value)}" placeholder="Enterで絞り込み" />
         </th>`;
       })
       .join("");
@@ -176,6 +244,9 @@
 
   function cellDisplay(part, column) {
     if (column.key === "name") return escapeHtml(part.name || "");
+    if (column.key === "updated_at") {
+      return escapeHtml(formatUpdatedAt(part.updated_at));
+    }
     const value = part[column.key];
     if (column.type === "file") {
       const count = Array.isArray(value) ? value.length : 0;
@@ -188,10 +259,7 @@
   function rowHtml(part, cols) {
     const active = part.id === state.selectedId ? "active" : "";
     const tds = cols
-      .map(
-        (c) =>
-          `<td class="${c.key === "name" ? "col-name" : ""}">${cellDisplay(part, c)}</td>`
-      )
+      .map((c) => `<td class="${stickyClass(c)}">${cellDisplay(part, c)}</td>`)
       .join("");
     return `<tr data-id="${part.id}" class="${active}">${tds}</tr>`;
   }
@@ -229,86 +297,153 @@
     setActiveRow(null);
   }
 
+  function getAssignedKeys(part) {
+    const catalogKeys = new Set(state.columns.map((c) => c.key));
+    if (Array.isArray(part.assigned)) {
+      return part.assigned.filter((key) => catalogKeys.has(key));
+    }
+    return state.columns.filter((c) => part[c.key] !== undefined).map((c) => c.key);
+  }
+
+  function assignedColumns(part) {
+    const byKey = Object.fromEntries(state.columns.map((c) => [c.key, c]));
+    return getAssignedKeys(part).map((key) => byKey[key]).filter(Boolean);
+  }
+
+  function renderField(part, col) {
+    if (col.type === "file") {
+      const files = part[col.key] || [];
+      const list = files
+        .map(
+          (f) => `<div class="file-item">
+            <a href="/api/parts/${part.id}/files/${col.key}/${f.id}" target="_blank" rel="noopener">${escapeHtml(
+              f.original_name
+            )}</a>
+            <button type="button" class="btn" data-delete-file="${col.key}:${f.id}">削除</button>
+          </div>`
+        )
+        .join("");
+      return `<div class="field" data-file-field="${col.key}">
+        <label>${escapeHtml(col.label)}</label>
+        <div class="file-list">${list || "<span class=\"file-count\">ファイルなし</span>"}</div>
+        <input type="file" accept=".pdf,.png,application/pdf,image/png" data-upload-key="${col.key}" ${
+          state.mode === "create" ? "disabled" : ""
+        } />
+        ${
+          state.mode === "create"
+            ? "<p class=\"hint\">保存後にファイルを添付できます。</p>"
+            : "<p class=\"hint\">PDF / PNG、1ファイル 10MB まで</p>"
+        }
+      </div>`;
+    }
+
+    const value = part[col.key] ?? "";
+    const inputType = col.type === "number" ? "number" : "text";
+    return `<div class="field">
+      <label for="field-${col.key}">${escapeHtml(col.label)}</label>
+      <input id="field-${col.key}" name="${col.key}" type="${inputType}" value="${escapeAttr(
+      value
+    )}" step="any" />
+    </div>`;
+  }
+
+  function unassignedColumns(part) {
+    const assigned = new Set(getAssignedKeys(part));
+    return state.columns.filter((c) => !assigned.has(c.key));
+  }
+
+  function renderAssignBox(part) {
+    const existingOptions = unassignedColumns(part)
+      .map(
+        (c) =>
+          `<option value="${escapeAttr(c.key)}">${escapeHtml(c.label)} (${c.type})</option>`
+      )
+      .join("");
+
+    return `<div class="add-column-box">
+      <h4>項目を割り当て</h4>
+      <div class="field">
+        <label>割り当て方法</label>
+        <select id="assignMode">
+          <option value="existing">既存カラムを追加</option>
+          <option value="create">新規カラムを作成して追加</option>
+        </select>
+      </div>
+      <div id="assignExistingFields" class="assign-pane">
+        <div class="field">
+          <label>既存カラム</label>
+          <select id="existingColKey" ${existingOptions ? "" : "disabled"}>
+            ${
+              existingOptions ||
+              '<option value="">割り当て可能なカラムがありません</option>'
+            }
+          </select>
+        </div>
+      </div>
+      <div id="assignCreateFields" class="assign-pane" hidden>
+        <div class="field">
+          <label>表示名</label>
+          <input id="newColLabel" placeholder="例: フットプリント" />
+        </div>
+        <div class="field">
+          <label>型</label>
+          <select id="newColType">
+            <option value="text">text</option>
+            <option value="number">number</option>
+            <option value="file">file</option>
+          </select>
+        </div>
+      </div>
+      <button type="button" class="btn" id="assignColumnBtn">追加</button>
+    </div>`;
+  }
+
   function renderSheet() {
-    const part = state.editing || { name: "" };
+    const part = state.editing || { name: "", assigned: [] };
+    if (!Array.isArray(part.assigned)) {
+      part.assigned = getAssignedKeys(part);
+    }
+    state.editing = part;
+
     els.sheetTitle.textContent = state.mode === "create" ? "新規部品" : "部品詳細";
     els.deletePartBtn.hidden = state.mode === "create";
 
     const fields = [
       `<div class="field">
-        <label for="field-name">部品名称（必須）</label>
+        <label for="field-name">名称（必須）</label>
         <input id="field-name" name="name" value="${escapeAttr(part.name || "")}" required />
       </div>`,
     ];
 
-    state.columns.forEach((col) => {
-      if (col.type === "file") {
-        const files = part[col.key] || [];
-        const list = files
-          .map(
-            (f) => `<div class="file-item">
-              <a href="/api/parts/${part.id}/files/${col.key}/${f.id}" target="_blank" rel="noopener">${escapeHtml(
-                f.original_name
-              )}</a>
-              <button type="button" class="btn" data-delete-file="${col.key}:${f.id}">削除</button>
-            </div>`
-          )
-          .join("");
-        fields.push(`<div class="field" data-file-field="${col.key}">
-          <label>${escapeHtml(col.label)}</label>
-          <div class="file-list">${list || "<span class=\"file-count\">ファイルなし</span>"}</div>
-          <input type="file" accept=".pdf,.png,application/pdf,image/png" data-upload-key="${col.key}" ${
-            state.mode === "create" ? "disabled" : ""
-          } />
-          ${
-            state.mode === "create"
-              ? "<p class=\"hint\">保存後にファイルを添付できます。</p>"
-              : "<p class=\"hint\">PDF / PNG、1ファイル 10MB まで</p>"
-          }
-        </div>`);
-        return;
-      }
-
-      const value = part[col.key] ?? "";
-      const inputType = col.type === "number" ? "number" : "text";
-      fields.push(`<div class="field">
-        <label for="field-${col.key}">${escapeHtml(col.label)}</label>
-        <input id="field-${col.key}" name="${col.key}" type="${inputType}" value="${escapeAttr(
-        value
-      )}" step="any" />
+    if (state.mode === "edit") {
+      fields.push(`<div class="readonly-meta">
+        <div class="field">
+          <label>更新日</label>
+          <div class="readonly-value">${escapeHtml(formatUpdatedAt(part.updated_at))}</div>
+        </div>
       </div>`);
-    });
+    }
 
-    fields.push(`<div class="add-column-box">
-      <h4>カラムを追加</h4>
-      <div class="field">
-        <label>表示名</label>
-        <input id="newColLabel" placeholder="例: フットプリント" />
-      </div>
-      <div class="field">
-        <label>キー（英小文字など）</label>
-        <input id="newColKey" placeholder="例: footprint" />
-      </div>
-      <div class="field">
-        <label>型</label>
-        <select id="newColType">
-          <option value="text">text</option>
-          <option value="number">number</option>
-          <option value="file">file</option>
-        </select>
-      </div>
-      <button type="button" class="btn" id="addColumnBtn">カラム追加</button>
-    </div>`);
+    const assigned = assignedColumns(part);
+    if (!assigned.length) {
+      fields.push(`<p class="hint">割り当て済みの項目はまだありません。下のフォームから追加してください。</p>`);
+    } else {
+      assigned.forEach((col) => fields.push(renderField(part, col)));
+    }
 
+    fields.push(renderAssignBox(part));
     els.sheetBody.innerHTML = fields.join("");
     openSheet();
   }
 
   function collectFormPayload() {
-    const payload = {};
+    const part = state.editing || { assigned: [] };
+    const payload = {
+      assigned: getAssignedKeys(part),
+    };
     const nameInput = els.sheetBody.querySelector("#field-name");
     payload.name = nameInput ? nameInput.value.trim() : "";
-    state.columns.forEach((col) => {
+    assignedColumns(part).forEach((col) => {
       if (col.type === "file") return;
       const input = els.sheetBody.querySelector(`[name="${col.key}"]`);
       if (!input) return;
@@ -316,6 +451,93 @@
       payload[col.key] = value === "" ? null : value;
     });
     return payload;
+  }
+
+  function syncEditingFromForm() {
+    if (!state.editing) return;
+    const payload = collectFormPayload();
+    state.editing = {
+      ...state.editing,
+      ...payload,
+      assigned: payload.assigned,
+    };
+  }
+
+  async function persistAssignedIfSaved() {
+    if (state.mode !== "edit" || !state.selectedId) return;
+    const payload = collectFormPayload();
+    const updated = await api(`/api/parts/${state.selectedId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    state.editing = updated;
+    await fetchParts();
+  }
+
+  function makeColumnKey(label) {
+    let base = label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!/^[a-z]/.test(base)) {
+      base = `col_${Date.now().toString(36)}`;
+    }
+    const existing = new Set(state.columns.map((c) => c.key));
+    if (!existing.has(base)) return base;
+    let n = 2;
+    while (existing.has(`${base}_${n}`)) n += 1;
+    return `${base}_${n}`;
+  }
+
+  async function assignColumn() {
+    syncEditingFromForm();
+    const mode = document.getElementById("assignMode")?.value || "existing";
+    try {
+      let key = "";
+      if (mode === "create") {
+        const label = document.getElementById("newColLabel").value.trim();
+        const type = document.getElementById("newColType").value;
+        if (!label) {
+          showStatus("表示名を入力してください");
+          return;
+        }
+        key = makeColumnKey(label);
+        const column = await api("/api/columns", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, label, type }),
+        });
+        state.columns = await api("/api/columns").then((d) => d.columns);
+        if (!state.columnOrder.includes(column.key)) {
+          state.columnOrder = state.columnOrder.concat(column.key);
+        }
+        if (!state.visibleKeys.includes(column.key) && column.type !== "file") {
+          state.visibleKeys = state.visibleKeys.concat(column.key);
+        }
+        saveColumnPrefs(state.visibleKeys, state.columnOrder);
+        key = column.key;
+      } else {
+        key = document.getElementById("existingColKey")?.value || "";
+        if (!key) {
+          showStatus("追加する既存カラムを選んでください");
+          return;
+        }
+      }
+
+      const assigned = getAssignedKeys(state.editing);
+      if (assigned.includes(key)) {
+        showStatus("すでに割り当て済みです");
+        return;
+      }
+      state.editing.assigned = assigned.concat(key);
+      await persistAssignedIfSaved();
+      showStatus("");
+      renderSheet();
+      if (mode === "create") renderTable();
+    } catch (err) {
+      showStatus(err.message);
+    }
   }
 
   function setActiveRow(id) {
@@ -340,7 +562,7 @@
 
   function openNew() {
     state.mode = "create";
-    state.editing = { name: "" };
+    state.editing = { name: "", assigned: [] };
     setActiveRow(null);
     renderSheet();
   }
@@ -348,7 +570,7 @@
   async function savePart() {
     const payload = collectFormPayload();
     if (!payload.name) {
-      showStatus("部品名称は必須です");
+      showStatus("名称は必須です");
       return;
     }
     try {
@@ -421,56 +643,71 @@
     }
   }
 
-  async function addColumn() {
-    const label = document.getElementById("newColLabel").value.trim();
-    let key = document.getElementById("newColKey").value.trim();
-    const type = document.getElementById("newColType").value;
-    if (!key && label) {
-      key = label
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "");
-      if (!/^[a-z]/.test(key)) key = `col_${key || Date.now()}`;
+  function orderedColumnsForSettings() {
+    const byKey = Object.fromEntries(state.columns.map((c) => [c.key, c]));
+    return state.columnOrder.map((key) => byKey[key]).filter(Boolean);
+  }
+
+  let columnSortable = null;
+
+  function renderColumnSettingsList() {
+    const cols = orderedColumnsForSettings();
+    els.columnChecks.innerHTML = cols
+      .map((c) => {
+        const checked = state.visibleKeys.includes(c.key) ? "checked" : "";
+        return `<div class="column-row" data-key="${escapeAttr(c.key)}">
+          <span class="column-handle" aria-hidden="true" title="ドラッグして並べ替え">⠿</span>
+          <label>
+            <input type="checkbox" value="${escapeAttr(c.key)}" ${checked} />
+            <span>${escapeHtml(c.label)} <span class="file-count">(${c.type})</span></span>
+          </label>
+        </div>`;
+      })
+      .join("");
+  }
+
+  function initColumnSortable() {
+    if (columnSortable) {
+      columnSortable.destroy();
+      columnSortable = null;
     }
-    try {
-      const column = await api("/api/columns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, label, type }),
-      });
-      state.columns = await api("/api/columns").then((d) => d.columns);
-      if (!state.visibleKeys.includes(column.key) && column.type !== "file") {
-        state.visibleKeys.push(column.key);
-        saveVisibleKeys(state.visibleKeys);
-      }
-      renderSheet();
-      renderTable();
-    } catch (err) {
-      showStatus(err.message);
+    if (typeof Sortable === "undefined") {
+      showStatus("並べ替えライブラリの読み込みに失敗しました");
+      return;
     }
+    columnSortable = Sortable.create(els.columnChecks, {
+      handle: ".column-handle",
+      ghostClass: "is-ghost",
+      animation: 150,
+      draggable: ".column-row",
+    });
   }
 
   function openColumnSettings() {
-    els.columnChecks.innerHTML = state.columns
-      .map((c) => {
-        const checked = state.visibleKeys.includes(c.key) ? "checked" : "";
-        return `<label><input type="checkbox" value="${escapeAttr(c.key)}" ${checked} /> ${escapeHtml(
-          c.label
-        )} <span class="file-count">(${c.type})</span></label>`;
-      })
-      .join("");
+    renderColumnSettingsList();
     els.columnDialog.showModal();
+    initColumnSortable();
   }
 
-  function debounce(fn, ms) {
-    let t;
-    return (...args) => {
-      clearTimeout(t);
-      t = setTimeout(() => fn(...args), ms);
-    };
+  function closeColumnSettings() {
+    if (columnSortable) {
+      columnSortable.destroy();
+      columnSortable = null;
+    }
+    if (els.columnDialog.open) {
+      els.columnDialog.close();
+    }
   }
 
-  const reloadFromFilters = debounce(() => fetchParts(), 250);
+  function applyFiltersFromInputs() {
+    const next = {};
+    els.filterRow.querySelectorAll("[data-filter-key]").forEach((input) => {
+      const value = input.value.trim();
+      if (value) next[input.dataset.filterKey] = value;
+    });
+    state.filters = next;
+    fetchParts();
+  }
 
   function escapeHtml(value) {
     return String(value)
@@ -487,16 +724,21 @@
   function bindEvents() {
     window.addEventListener("resize", () => requestAnimationFrame(syncHeaderStickyOffset));
 
-    els.searchInput.addEventListener(
-      "input",
-      debounce((e) => {
-        state.query = e.target.value.trim();
-        fetchParts();
-      }, 250)
-    );
+    els.searchInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      state.query = els.searchInput.value.trim();
+      fetchParts();
+    });
 
     els.newPartBtn.addEventListener("click", openNew);
     els.columnSettingsBtn.addEventListener("click", openColumnSettings);
+
+    els.columnDialog.addEventListener("click", (e) => {
+      if (e.target === els.columnDialog) {
+        closeColumnSettings();
+      }
+    });
     els.closeSheetBtn.addEventListener("click", closeSheet);
     els.cancelSheetBtn.addEventListener("click", closeSheet);
     els.sheetBackdrop.addEventListener("click", closeSheet);
@@ -516,14 +758,12 @@
       fetchParts();
     });
 
-    els.filterRow.addEventListener("input", (e) => {
+    els.filterRow.addEventListener("keydown", (e) => {
       const input = e.target.closest("[data-filter-key]");
       if (!input) return;
-      const key = input.dataset.filterKey;
-      const value = input.value.trim();
-      if (value) state.filters[key] = value;
-      else delete state.filters[key];
-      reloadFromFilters();
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      applyFiltersFromInputs();
     });
 
     els.partsBody.addEventListener("click", (e) => {
@@ -540,6 +780,14 @@
     });
 
     els.sheetBody.addEventListener("change", (e) => {
+      if (e.target && e.target.id === "assignMode") {
+        const create = e.target.value === "create";
+        const existingPane = document.getElementById("assignExistingFields");
+        const createPane = document.getElementById("assignCreateFields");
+        if (existingPane) existingPane.hidden = create;
+        if (createPane) createPane.hidden = !create;
+        return;
+      }
       const upload = e.target.closest("[data-upload-key]");
       if (upload && upload.files && upload.files[0]) {
         uploadFile(upload.dataset.uploadKey, upload.files[0]);
@@ -554,16 +802,23 @@
         deleteFile(columnKey, fileId);
         return;
       }
-      if (e.target.id === "addColumnBtn") addColumn();
+      if (e.target.id === "assignColumnBtn") assignColumn();
     });
 
     els.columnForm.addEventListener("submit", (e) => {
       const submitter = e.submitter;
       if (submitter && submitter.value === "ok") {
-        const keys = [...els.columnChecks.querySelectorAll("input:checked")].map((el) => el.value);
-        state.visibleKeys = keys;
-        saveVisibleKeys(keys);
+        const order = [...els.columnChecks.querySelectorAll(".column-row")].map((el) => el.dataset.key);
+        const visible = [...els.columnChecks.querySelectorAll("input[type=checkbox]:checked")].map(
+          (el) => el.value
+        );
+        const visibleOrdered = order.filter((key) => visible.includes(key));
+        saveColumnPrefs(visibleOrdered, order);
         renderTable();
+      }
+      if (columnSortable) {
+        columnSortable.destroy();
+        columnSortable = null;
       }
     });
   }
@@ -573,7 +828,12 @@
     try {
       const data = await api("/api/columns");
       state.columns = data.columns;
-      state.visibleKeys = loadVisibleKeys(state.columns);
+      state.columnOrder = loadColumnOrder(state.columns);
+      state.visibleKeys = loadVisibleKeys(state.columns).filter((key) =>
+        state.columnOrder.includes(key)
+      );
+      // visibleKeys も order に合わせて並べる
+      state.visibleKeys = state.columnOrder.filter((key) => state.visibleKeys.includes(key));
       await fetchParts();
     } catch (err) {
       showStatus(err.message);

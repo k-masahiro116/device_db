@@ -45,6 +45,42 @@ def api_create_column():
     return jsonify(column), 201
 
 
+@app.put("/api/columns/<column_key>")
+def api_update_column(column_key: str):
+    payload = request.get_json(silent=True) or {}
+    try:
+        column = storage.update_column(column_key, payload)
+    except KeyError as exc:
+        return _error(str(exc), 404)
+    except ValueError as exc:
+        return _error(str(exc))
+    return jsonify(column)
+
+
+@app.delete("/api/columns/<column_key>")
+def api_delete_column(column_key: str):
+    try:
+        storage.delete_column(column_key)
+    except KeyError as exc:
+        return _error(str(exc), 404)
+    return jsonify({"ok": True})
+
+
+@app.put("/api/columns")
+def api_reorder_columns():
+    payload = request.get_json(silent=True) or {}
+    keys = payload.get("keys")
+    if not isinstance(keys, list):
+        return _error("keys 配列が必要です")
+    columns = storage.reorder_columns([str(k) for k in keys])
+    return jsonify({"columns": columns})
+
+
+@app.get("/columns")
+def columns_page():
+    return render_template("columns.html")
+
+
 @app.get("/api/parts")
 def api_list_parts():
     try:

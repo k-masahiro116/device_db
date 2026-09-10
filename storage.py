@@ -18,7 +18,7 @@ PARTS_PATH = DATA_DIR / "parts.json"
 COLUMNS_PATH = DATA_DIR / "columns.json"
 UPLOADS_DIR = DATA_DIR / "uploads"
 
-SYSTEM_KEYS = frozenset({"id", "name", "created_at", "updated_at"})
+SYSTEM_KEYS = frozenset({"id", "name", "created_at", "updated_at", "assigned"})
 KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 ALLOWED_COLUMN_TYPES = frozenset({"text", "number", "file"})
 ALLOWED_MIME = {
@@ -158,6 +158,33 @@ def sparse_part_fields(
     return result
 
 
+def normalize_assigned(keys: Any, columns: dict[str, dict[str, Any]]) -> list[str]:
+    if not isinstance(keys, list):
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for key in keys:
+        text = str(key).strip()
+        if text in columns and text not in seen:
+            seen.add(text)
+            result.append(text)
+    return result
+
+
+def infer_assigned(part: dict[str, Any], columns: dict[str, dict[str, Any]]) -> list[str]:
+    if isinstance(part.get("assigned"), list):
+        return normalize_assigned(part["assigned"], columns)
+    # 既存データ移行: 値が入っているカタログキーを割り当て済みとみなす
+    return [key for key in part.keys() if key in columns]
+
+
+def attach_assigned(part: dict[str, Any], columns: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    cols = columns or column_map()
+    enriched = dict(part)
+    enriched["assigned"] = infer_assigned(enriched, cols)
+    return enriched
+
+
 def create_column(payload: dict[str, Any]) -> dict[str, Any]:
     key = str(payload.get("key", "")).strip()
     label = str(payload.get("label", "")).strip()
@@ -188,31 +215,114 @@ def create_column(payload: dict[str, Any]) -> dict[str, Any]:
     return column
 
 
+def update_column(column_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+    columns = load_columns()
+    index = next((i for i, c in enumerate(columns) if c.get("key") == column_key), None)
+    if index is None:
+        raise KeyError("カラムが見つかりません")
+
+    column = dict(columns[index])
+    if "label" in payload:
+        label = str(payload.get("label", "")).strip()
+        if not label:
+            raise ValueError("名称は必須です")
+        column["label"] = label
+    if "order" in payload and payload.get("order") is not None:
+        column["order"] = int(payload["order"])
+    # type の変更は既存データ破壊の恐れがあるためデモでは不可
+
+    columns[index] = column
+    save_columns(columns)
+    return column
+
+
+def delete_column(column_key: str) -> None:
+    columns = load_columns()
+    target = next((c for c in columns if c.get("key") == column_key), None)
+    if target is None:
+        raise KeyError("カラムが見つかりません")
+
+    columns = [c for c in columns if c.get("key") != column_key]
+    save_columns(columns)
+
+    parts = load_parts()
+    changed = False
+    for part in parts:
+        part_changed = False
+        if isinstance(part.get("assigned"), list) and column_key in part["assigned"]:
+            part["assigned"] = [k for k in part["assigned"] if k != column_key]
+            part_changed = True
+        if column_key in part:
+            if target.get("type") == "file":
+                for meta in part.get(column_key) or []:
+                    stored = meta.get("stored_name")
+                    if stored:
+                        _delete_file_on_disk(stored)
+            del part[column_key]
+            part_changed = True
+        if part_changed:
+            part["updated_at"] = utc_now_iso()
+            changed = True
+    if changed:
+        save_parts(parts)
+
+
+def reorder_columns(keys: list[str]) -> list[dict[str, Any]]:
+    columns = load_columns()
+    by_key = {c["key"]: c for c in columns}
+    ordered: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for i, key in enumerate(keys):
+        col = by_key.get(key)
+        if not col or key in seen:
+            continue
+        updated = dict(col)
+        updated["order"] = i + 1
+        ordered.append(updated)
+        seen.add(key)
+    for col in columns:
+        if col["key"] not in seen:
+            updated = dict(col)
+            updated["order"] = len(ordered) + 1
+            ordered.append(updated)
+            seen.add(col["key"])
+    save_columns(ordered)
+    return ordered
+
+
 def get_part(part_id: str) -> dict[str, Any] | None:
+    columns = column_map()
     for part in load_parts():
         if part.get("id") == part_id:
-            return part
+            return attach_assigned(part, columns)
     return None
 
 
 def create_part(payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name", "")).strip()
     if not name:
-        raise ValueError("部品名称（name）は必須です")
+        raise ValueError("名称（name）は必須です")
 
     columns = column_map()
     now = utc_now_iso()
+    fields = sparse_part_fields(payload, columns, keep_files=False)
+    assigned = normalize_assigned(payload.get("assigned"), columns)
+    for key in fields:
+        if key not in assigned:
+            assigned.append(key)
+
     part = {
         "id": str(uuid.uuid4()),
         "name": name,
+        "assigned": assigned,
         "created_at": now,
         "updated_at": now,
     }
-    part.update(sparse_part_fields(payload, columns, keep_files=False))
+    part.update(fields)
     parts = load_parts()
     parts.append(part)
     save_parts(parts)
-    return part
+    return attach_assigned(part, columns)
 
 
 def update_part(part_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -225,13 +335,18 @@ def update_part(part_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     if "name" in payload:
         name = str(payload.get("name", "")).strip()
         if not name:
-            raise ValueError("部品名称（name）は必須です")
+            raise ValueError("名称（name）は必須です")
         existing["name"] = name
 
     columns = column_map()
-    # Preserve existing file fields unless payload explicitly sets them (API uses dedicated endpoints)
     file_keys = {k for k, c in columns.items() if c["type"] == "file"}
     preserved_files = {k: deepcopy(existing[k]) for k in file_keys if k in existing}
+
+    if "assigned" in payload:
+        assigned = normalize_assigned(payload.get("assigned"), columns)
+    else:
+        assigned = infer_assigned(existing, columns)
+    existing["assigned"] = assigned
 
     # Remove previous user-defined non-file keys, then re-apply from payload
     for key in list(existing.keys()):
@@ -240,6 +355,7 @@ def update_part(part_id: str, payload: dict[str, Any]) -> dict[str, Any]:
 
     existing.update(sparse_part_fields(payload, columns, keep_files=False))
     for key, files in preserved_files.items():
+        # 割り当てから外してもファイル実体は残す（再割り当て時のため）
         existing[key] = files
 
     # Allow clearing a non-file field by sending null
@@ -254,7 +370,7 @@ def update_part(part_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     existing["updated_at"] = utc_now_iso()
     parts[index] = existing
     save_parts(parts)
-    return existing
+    return attach_assigned(existing, columns)
 
 
 def _delete_file_on_disk(stored_name: str) -> None:
@@ -282,7 +398,7 @@ def delete_part(part_id: str) -> None:
 
 
 def _text_columns(columns: dict[str, dict[str, Any]]) -> list[str]:
-    return ["name"] + [k for k, c in columns.items() if c["type"] in ("text", "number")]
+    return ["name", "id"] + [k for k, c in columns.items() if c["type"] in ("text", "number")]
 
 
 def _value_as_text(value: Any) -> str:
@@ -317,8 +433,8 @@ def _matches_filters(
         if not raw:
             continue
         needle = raw.casefold()
-        if key == "name":
-            hay = _value_as_text(part.get("name")).casefold()
+        if key in ("name", "id", "created_at", "updated_at"):
+            hay = _value_as_text(part.get(key)).casefold()
         elif key in columns:
             hay = _value_as_text(part.get(key)).casefold()
         else:
@@ -374,7 +490,7 @@ def list_parts(
     offset = max(0, offset)
     page = items[offset : offset + limit]
     return {
-        "items": page,
+        "items": [attach_assigned(p, columns) for p in page],
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -425,6 +541,10 @@ def add_file(
     files = list(part.get(column_key) or [])
     files.append(meta)
     part[column_key] = files
+    assigned = infer_assigned(part, columns)
+    if column_key not in assigned:
+        assigned.append(column_key)
+    part["assigned"] = assigned
     part["updated_at"] = utc_now_iso()
     parts[index] = part
     save_parts(parts)

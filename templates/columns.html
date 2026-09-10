@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>カラム管理 — device_db</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><a class="brand-link" href="/">device_db</a></div>
+      <div class="topbar-actions">
+        <a class="btn" href="/">部品一覧へ</a>
+        <button id="openCreateBtn" class="btn btn-primary" type="button">新規カラム</button>
+      </div>
+    </header>
+
+    <main class="main columns-page">
+      <div class="page-header">
+        <div>
+          <h1>カラム管理</h1>
+          <p class="hint">名称セルをクリックしてインライン編集できます（Enter / Tab / フォーカス外で確定、Esc でキャンセル）。型・内部キーは変更できません。</p>
+        </div>
+      </div>
+
+      <div id="statusMessage" class="status" hidden></div>
+
+      <section class="panel">
+        <div class="panel-header panel-header-row">
+          <div>
+            <h2>カラム一覧</h2>
+            <p class="hint">⠿ をドラッグして並び順を変更できます。</p>
+          </div>
+          <button id="openCreateBtnSecondary" class="btn btn-primary" type="button">新規カラム</button>
+        </div>
+        <div class="inline-table-wrap" id="columnTableWrap">
+          <table class="inline-table" id="columnTable">
+            <thead>
+              <tr>
+                <th class="col-handle"></th>
+                <th>名称 <span class="edit-hint">✎</span></th>
+                <th>型</th>
+                <th>内部キー</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody id="columnTableBody"></tbody>
+          </table>
+          <p id="emptyColumns" class="empty" hidden>カラムがありません。「新規カラム」から作成してください。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="createDialog" class="dialog">
+    <form method="dialog" id="createForm">
+      <h3>新規カラム</h3>
+      <p class="hint">名称と型を指定してカラムを作成します。内部キーは自動で付与されます。</p>
+      <div class="field">
+        <label for="createLabel">名称</label>
+        <input id="createLabel" placeholder="例: フットプリント" />
+      </div>
+      <div class="field">
+        <label for="createType">型</label>
+        <select id="createType">
+          <option value="text">text（テキスト）</option>
+          <option value="number">number（数値）</option>
+          <option value="file">file（PDF / PNG）</option>
+        </select>
+      </div>
+      <div id="createError" class="status" hidden></div>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel" type="submit" formnovalidate>キャンセル</button>
+        <button class="btn btn-primary" value="ok" type="submit">作成</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='vendor/Sortable.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/columns.js') }}"></script>
+</body>
+</html>
