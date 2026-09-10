@@ -173,11 +173,20 @@ a.btn {
   white-space: nowrap;
   vertical-align: middle;
   box-sizing: border-box;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .parts-table th:last-child,
 .parts-table td:last-child {
   border-right: none;
+}
+
+.parts-table .filter-input {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .parts-table thead th {
@@ -391,8 +400,10 @@ a.btn {
 }
 
 .field textarea {
-  min-height: 72px;
+  min-height: 120px;
   resize: vertical;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .file-list {

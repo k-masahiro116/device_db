@@ -20,7 +20,7 @@ UPLOADS_DIR = DATA_DIR / "uploads"
 
 SYSTEM_KEYS = frozenset({"id", "name", "created_at", "updated_at", "assigned"})
 KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-ALLOWED_COLUMN_TYPES = frozenset({"text", "number", "file"})
+ALLOWED_COLUMN_TYPES = frozenset({"text", "textarea", "number", "file"})
 ALLOWED_MIME = {
     "application/pdf": ".pdf",
     "image/png": ".png",
@@ -197,7 +197,7 @@ def create_column(payload: dict[str, Any]) -> dict[str, Any]:
     if not label:
         raise ValueError("label は必須です")
     if col_type not in ALLOWED_COLUMN_TYPES:
-        raise ValueError("type は text / number / file のいずれかです")
+        raise ValueError("type は text / textarea / number / file のいずれかです")
 
     columns = load_columns()
     if any(c["key"] == key for c in columns):
@@ -398,7 +398,7 @@ def delete_part(part_id: str) -> None:
 
 
 def _text_columns(columns: dict[str, dict[str, Any]]) -> list[str]:
-    return ["name", "id"] + [k for k, c in columns.items() if c["type"] in ("text", "number")]
+    return ["name", "id"] + [k for k, c in columns.items() if c["type"] in ("text", "textarea", "number")]
 
 
 def _value_as_text(value: Any) -> str:

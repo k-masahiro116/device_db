@@ -4,7 +4,18 @@
       "id": "99831b59-2949-4cd5-ab86-473004a036b1",
       "name": "チップ抵抗 10kΩ",
       "created_at": "2026-09-09T08:11:35+00:00",
-      "updated_at": "2026-09-09T08:11:35+00:00",
+      "updated_at": "2026-09-10T17:02:48+00:00",
+      "assigned": [
+        "manufacturer",
+        "part_number",
+        "category",
+        "package",
+        "tolerance",
+        "supplier",
+        "unit_price",
+        "stock",
+        "notes"
+      ],
       "manufacturer": "Yageo",
       "part_number": "RC0603FR-0710KL",
       "category": "抵抗",
@@ -13,7 +24,7 @@
       "supplier": "Digi-Key",
       "unit_price": 1.2,
       "stock": 500,
-      "notes": "汎用プルアップ用"
+      "notes": "汎用プルアップ用\nあああ\nあああ"
     },
     {
       "id": "5d037087-c243-4470-8e4a-a1f37af1b653",
@@ -76,13 +87,24 @@
       "id": "549a5cdc-3606-4fef-8b0b-1e37ed00a4ec",
       "name": "チップ抵抗 1kΩ",
       "created_at": "2026-09-09T08:27:39+00:00",
-      "updated_at": "2026-09-09T08:27:39+00:00",
+      "updated_at": "2026-09-10T16:47:52+00:00",
+      "assigned": [
+        "manufacturer",
+        "part_number",
+        "category",
+        "package",
+        "supplier",
+        "unit_price",
+        "stock",
+        "tolerance",
+        "notes"
+      ],
       "manufacturer": "Yageo",
       "part_number": "RC0603FR-071KL",
       "category": "抵抗",
       "package": "0603",
       "supplier": "Digi-Key",
-      "unit_price": 1.0,
+      "unit_price": 1,
       "stock": 800,
       "tolerance": "1%"
     },

@@ -338,6 +338,12 @@
     }
 
     const value = part[col.key] ?? "";
+    if (col.type === "textarea") {
+      return `<div class="field">
+      <label for="field-${col.key}">${escapeHtml(col.label)}</label>
+      <textarea id="field-${col.key}" name="${col.key}" rows="5">${escapeHtml(String(value))}</textarea>
+    </div>`;
+    }
     const inputType = col.type === "number" ? "number" : "text";
     return `<div class="field">
       <label for="field-${col.key}">${escapeHtml(col.label)}</label>
@@ -389,6 +395,7 @@
           <label>型</label>
           <select id="newColType">
             <option value="text">text</option>
+            <option value="textarea">textarea（複数行）</option>
             <option value="number">number</option>
             <option value="file">file</option>
           </select>

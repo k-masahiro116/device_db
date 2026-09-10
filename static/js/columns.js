@@ -46,6 +46,7 @@
   function typeLabel(type) {
     if (type === "number") return "数値";
     if (type === "file") return "ファイル";
+    if (type === "textarea") return "複数行";
     return "テキスト";
   }
 

@@ -9,7 +9,7 @@
     {
       "key": "notes",
       "label": "社内メモ",
-      "type": "text",
+      "type": "textarea",
       "order": 2
     },
     {
